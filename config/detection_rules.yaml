@@ -1,0 +1,64 @@
+# Healthcare Privacy Firewall — Detection Rules
+# ================================================
+
+detection_engines:
+  presidio:
+    enabled: true
+    language: "en"
+    entities:
+      - PERSON
+      - PHONE_NUMBER
+      - EMAIL_ADDRESS
+      - US_SSN
+      - CREDIT_CARD
+      - DATE_TIME
+      - IP_ADDRESS
+      - US_DRIVER_LICENSE
+      - LOCATION
+    score_threshold: 0.5
+
+  regex:
+    enabled: true
+    pattern_files:
+      - "detection/medical_patterns.yaml"
+      - "detection/credential_patterns.yaml"
+
+  spacy:
+    enabled: true
+    model: "en_core_web_sm"
+    entities:
+      - PERSON
+      - ORG
+      - GPE
+      - DATE
+
+scan_settings:
+  text:
+    max_length: 1000000
+    encoding: "utf-8"
+    strip_html: true
+  image:
+    max_size_mb: 50
+    supported_formats:
+      - "png"
+      - "jpg"
+      - "jpeg"
+      - "tiff"
+      - "bmp"
+    ocr_language: "eng"
+    dpi: 300
+  audio:
+    max_duration_seconds: 600
+    supported_formats:
+      - "wav"
+      - "mp3"
+      - "flac"
+      - "m4a"
+    whisper_model: "base"
+    language: "en"
+
+preprocessing:
+  normalize_whitespace: true
+  lowercase_for_detection: false
+  remove_special_chars: false
+  decode_html_entities: true

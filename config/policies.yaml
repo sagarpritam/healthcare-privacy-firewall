@@ -1,0 +1,101 @@
+# Healthcare Privacy Firewall — Policy Configuration
+# ===================================================
+
+risk_thresholds:
+  low: 0.0
+  medium: 30.0
+  high: 60.0
+  critical: 85.0
+
+masking_strategies:
+  default: "redact"
+  strategies:
+    redact:
+      description: "Replace PII with [REDACTED] placeholder"
+      placeholder: "[REDACTED]"
+    hash:
+      description: "Replace PII with SHA-256 hash"
+      algorithm: "sha256"
+      salt: "healthcare-firewall-salt-2024"
+    partial_mask:
+      description: "Partially mask PII (e.g., ***-**-1234)"
+      mask_char: "*"
+      visible_chars: 4
+
+entity_policies:
+  PERSON:
+    action: "redact"
+    risk_weight: 15
+    alert: false
+  PHONE_NUMBER:
+    action: "partial_mask"
+    risk_weight: 10
+    alert: false
+  EMAIL_ADDRESS:
+    action: "redact"
+    risk_weight: 10
+    alert: false
+  US_SSN:
+    action: "hash"
+    risk_weight: 40
+    alert: true
+  CREDIT_CARD:
+    action: "hash"
+    risk_weight: 35
+    alert: true
+  MEDICAL_RECORD_NUMBER:
+    action: "redact"
+    risk_weight: 30
+    alert: true
+  NPI_NUMBER:
+    action: "redact"
+    risk_weight: 25
+    alert: true
+  ICD_CODE:
+    action: "redact"
+    risk_weight: 20
+    alert: false
+  DATE_OF_BIRTH:
+    action: "redact"
+    risk_weight: 20
+    alert: true
+  US_DRIVER_LICENSE:
+    action: "hash"
+    risk_weight: 30
+    alert: true
+  IP_ADDRESS:
+    action: "redact"
+    risk_weight: 5
+    alert: false
+  API_KEY:
+    action: "hash"
+    risk_weight: 45
+    alert: true
+  PASSWORD:
+    action: "redact"
+    risk_weight: 50
+    alert: true
+
+retention:
+  scan_logs_days: 90
+  alert_logs_days: 365
+  analytics_days: 730
+
+alerting:
+  enabled: true
+  channels:
+    - type: "slack"
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+      min_risk_score: 60.0
+    - type: "log"
+      min_risk_score: 0.0
+
+rate_limiting:
+  enabled: true
+  requests_per_minute: 100
+  burst_size: 20
+
+compliance:
+  hipaa_mode: true
+  audit_logging: true
+  encrypt_at_rest: true

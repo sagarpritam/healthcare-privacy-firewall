@@ -1,0 +1,141 @@
+# Healthcare Privacy Firewall — Docker Compose
+# Full stack: Gateway + Workers + Redis + PostgreSQL
+
+version: "3.9"
+
+services:
+  # ──── PostgreSQL Database ────
+  postgres:
+    image: postgres:16-alpine
+    container_name: firewall-postgres
+    environment:
+      POSTGRES_DB: healthcare_firewall
+      POSTGRES_USER: firewall_user
+      POSTGRES_PASSWORD: firewall_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U firewall_user -d healthcare_firewall" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - firewall-net
+
+  # ──── Redis Queue ────
+  redis:
+    image: redis:7-alpine
+    container_name: firewall-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - firewall-net
+
+  # ──── FastAPI Gateway ────
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: firewall-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://firewall_user:firewall_pass@postgres:5432/healthcare_firewall
+      - DATABASE_SYNC_URL=postgresql+psycopg2://firewall_user:firewall_pass@postgres:5432/healthcare_firewall
+      - REDIS_URL=redis://redis:6379/0
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8000
+      - SPACY_MODEL=en_core_web_sm
+      - PRESIDIO_SCORE_THRESHOLD=0.5
+      - WHISPER_MODEL=base
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - HIPAA_MODE=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - upload_data:/app/uploads
+    networks:
+      - firewall-net
+    restart: unless-stopped
+
+  # ──── Text Processing Worker ────
+  text-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: firewall-text-worker
+    command: python -m workers.text_worker_runner
+    environment:
+      - DATABASE_SYNC_URL=postgresql+psycopg2://firewall_user:firewall_pass@postgres:5432/healthcare_firewall
+      - REDIS_URL=redis://redis:6379/0
+      - SPACY_MODEL=en_core_web_sm
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - firewall-net
+    restart: unless-stopped
+
+  # ──── Image Processing Worker ────
+  image-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: firewall-image-worker
+    command: python -m workers.image_worker_runner
+    environment:
+      - DATABASE_SYNC_URL=postgresql+psycopg2://firewall_user:firewall_pass@postgres:5432/healthcare_firewall
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - firewall-net
+    restart: unless-stopped
+
+  # ──── Audio Processing Worker ────
+  audio-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: firewall-audio-worker
+    command: python -m workers.audio_worker_runner
+    environment:
+      - DATABASE_SYNC_URL=postgresql+psycopg2://firewall_user:firewall_pass@postgres:5432/healthcare_firewall
+      - REDIS_URL=redis://redis:6379/0
+      - WHISPER_MODEL=base
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - firewall-net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  upload_data:
+
+
+networks:
+  firewall-net:
+    driver: bridge

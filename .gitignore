@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker/postgres_data/
+docker/redis_data/
+
+# Uploads
+uploads/
+
+# Node
+node_modules/
+dashboard/react-ui/build/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Whisper model cache
+*.pt

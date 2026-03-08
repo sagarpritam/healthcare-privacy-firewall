@@ -1,0 +1,94 @@
+# Medical-specific PII/PHI Detection Patterns
+# ==============================================
+
+patterns:
+  MEDICAL_RECORD_NUMBER:
+    description: "Medical Record Number (MRN)"
+    patterns:
+      - regex: '\b(?:MRN|Medical Record (?:No|Number|#))[\s:]*([A-Z0-9]{6,12})\b'
+        score: 0.85
+      - regex: '\b[A-Z]{2,3}-\d{6,10}\b'
+        score: 0.6
+    context_words:
+      - "medical record"
+      - "MRN"
+      - "patient id"
+      - "chart number"
+
+  NPI_NUMBER:
+    description: "National Provider Identifier"
+    patterns:
+      - regex: '\b(?:NPI)[\s:#]*(\d{10})\b'
+        score: 0.9
+      - regex: '\b(1[0-9]{9})\b'
+        score: 0.4
+    context_words:
+      - "NPI"
+      - "national provider"
+      - "provider identifier"
+      - "provider number"
+    validation: "luhn"
+
+  ICD_CODE:
+    description: "ICD-10 Diagnosis Code"
+    patterns:
+      - regex: '\b(?:ICD[-\s]?10)[\s:]*([A-Z]\d{2}(?:\.\d{1,4})?)\b'
+        score: 0.9
+      - regex: '\b([A-TV-Z]\d{2}\.\d{1,4})\b'
+        score: 0.6
+    context_words:
+      - "diagnosis"
+      - "ICD"
+      - "diagnostic code"
+      - "condition"
+
+  CPT_CODE:
+    description: "Current Procedural Terminology Code"
+    patterns:
+      - regex: '\b(?:CPT)[\s:]*(\d{5})\b'
+        score: 0.85
+      - regex: '\b(99[0-9]{3})\b'
+        score: 0.4
+    context_words:
+      - "CPT"
+      - "procedure"
+      - "procedural"
+      - "billing code"
+
+  DATE_OF_BIRTH:
+    description: "Date of Birth"
+    patterns:
+      - regex: '\b(?:DOB|Date of Birth|Birth Date|D\.O\.B\.)[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})\b'
+        score: 0.95
+      - regex: '\b(?:born on|born|birthdate)[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})\b'
+        score: 0.85
+    context_words:
+      - "date of birth"
+      - "DOB"
+      - "born"
+      - "birthday"
+
+  HEALTH_PLAN_ID:
+    description: "Health Plan Beneficiary Number"
+    patterns:
+      - regex: '\b(?:HPBN|Health Plan|Insurance ID|Member ID)[\s:#]*([A-Z0-9]{8,15})\b'
+        score: 0.8
+    context_words:
+      - "health plan"
+      - "insurance"
+      - "beneficiary"
+      - "member id"
+      - "policy number"
+
+  DEA_NUMBER:
+    description: "DEA Registration Number"
+    patterns:
+      - regex: '\b(?:DEA)[\s:#]*([A-Z]{2}\d{7})\b'
+        score: 0.9
+      - regex: '\b([ABFGM][A-Z]\d{7})\b'
+        score: 0.5
+    context_words:
+      - "DEA"
+      - "drug enforcement"
+      - "prescriber"
+      - "controlled substance"
