@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from queue.redis_client import get_redis_client, QUEUE_AUDIO
+from job_queue.redis_client import RedisClient, QUEUE_AUDIO
 from workers.audio_worker.whisper_engine import get_whisper_engine
 from masking.pii_masker import PIIMasker
 from analytics.metrics_engine import get_metrics_engine

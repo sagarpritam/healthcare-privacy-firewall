@@ -8,13 +8,14 @@ import sys
 import logging
 import time
 import uuid
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, BackgroundTasks, status, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 # Add project root to path
@@ -44,7 +45,7 @@ except ImportError:
     HAS_WHISPER = False
 
 try:
-    from queue.redis_client import get_redis_client
+    from job_queue.redis_client import get_redis_client
     HAS_REDIS = True
 except ImportError:
     HAS_REDIS = False
@@ -151,6 +152,20 @@ async def lifespan(app: FastAPI):
 
 # ──────────────────────────── FastAPI App ────────────────────────────
 
+# --- API Key Security Setup ---
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+def get_api_key(api_key: str = Depends(api_key_header)):
+    """Validate the API key from the request header."""
+    expected_key = os.environ.get("API_KEY", "dev-secret-key-123")
+    if api_key != expected_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
+    return api_key
+
 app = FastAPI(
     title="Healthcare Privacy Firewall",
     description=(
@@ -201,7 +216,11 @@ async def health_check(request: Request):
 
 
 @app.post("/scan/text", response_model=TextScanResponse, tags=["Scanning"])
-async def scan_text(body: TextScanRequest, request: Request):
+async def scan_text(
+    body: TextScanRequest,
+    request: Request,
+    api_key: str = Depends(get_api_key)
+):
     """
     Scan text payload for PHI/PII.
     Detects entities, applies masking, scores risk, and evaluates policies.

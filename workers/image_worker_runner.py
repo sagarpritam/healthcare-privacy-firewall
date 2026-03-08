@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from queue.redis_client import get_redis_client, QUEUE_IMAGE
+from job_queue.redis_client import RedisClient, QUEUE_IMAGE
 from masking.blur_engine import BlurEngine
 from analytics.metrics_engine import get_metrics_engine
 
