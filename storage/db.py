@@ -35,15 +35,24 @@ def _get_async_engine():
     if _async_engine is None:
         try:
             from sqlalchemy.ext.asyncio import create_async_engine
-            _async_engine = create_async_engine(
-                DATABASE_URL,
-                echo=False,
-                pool_size=20,
-                max_overflow=10,
-                pool_pre_ping=True,
-            )
+            # Attempt to connect to Postgres natively
+            try:
+                _async_engine = create_async_engine(
+                    DATABASE_URL,
+                    echo=False,
+                    pool_size=20,
+                    max_overflow=10,
+                    pool_pre_ping=True,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to connect to PG natively, falling back to local SQLite async DB: {e}")
+                _async_engine = create_async_engine(
+                    "sqlite+aiosqlite:///./firewall_local.db",
+                    echo=False,
+                    connect_args={"check_same_thread": False}
+                )
         except Exception as e:
-            logger.warning(f"Could not create async DB engine: {e}")
+            logger.error(f"Could not create async DB engine at all: {e}")
             return None
     return _async_engine
 
@@ -72,15 +81,23 @@ def _get_sync_engine():
     if _sync_engine is None:
         try:
             from sqlalchemy import create_engine
-            _sync_engine = create_engine(
-                DATABASE_SYNC_URL,
-                echo=False,
-                pool_size=10,
-                max_overflow=5,
-                pool_pre_ping=True,
-            )
+            try:
+                _sync_engine = create_engine(
+                    DATABASE_SYNC_URL,
+                    echo=False,
+                    pool_size=10,
+                    max_overflow=5,
+                    pool_pre_ping=True,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to connect to PG natively, falling back to local SQLite sync DB: {e}")
+                _sync_engine = create_engine(
+                    "sqlite:///./firewall_local.db",
+                    echo=False,
+                    connect_args={"check_same_thread": False}
+                )
         except Exception as e:
-            logger.warning(f"Could not create sync DB engine: {e}")
+            logger.error(f"Could not create sync DB engine at all: {e}")
             return None
     return _sync_engine
 

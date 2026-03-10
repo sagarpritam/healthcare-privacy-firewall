@@ -4,6 +4,7 @@ Calculates weighted risk scores based on detected PII/PHI entities and context.
 """
 
 import logging
+import ipaddress
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -167,8 +168,14 @@ class RiskEngine:
 
         # External source IP increases risk
         source_ip = context.get("source_ip") or ""
-        if source_ip and not source_ip.startswith(("10.", "172.16.", "192.168.", "127.")):
-            modifier *= 1.2
+        if source_ip:
+            try:
+                # Use standard standard ipaddress library to correctly classify private/local networks
+                if not ipaddress.ip_address(source_ip).is_private:
+                    modifier *= 1.2
+            except ValueError:
+                # If IP is malformed/invalid, treat it as untrusted
+                modifier *= 1.2
 
         # Certain endpoints are higher risk
         endpoint = context.get("endpoint") or ""

@@ -153,25 +153,26 @@ class PIIMasker:
         return all_detections
 
     def _deduplicate(self, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove duplicate/overlapping detections, keeping highest confidence."""
+        """Remove duplicate/overlapping detections, keeping highest confidence (NMS style)."""
         if not detections:
             return []
 
-        # Sort by start position, then by score descending
-        sorted_dets = sorted(detections, key=lambda x: (x["start"], -x["score"]))
-        deduped = [sorted_dets[0]]
+        # Sort strictly by score descending
+        sorted_dets = sorted(detections, key=lambda x: x["score"], reverse=True)
+        deduped = []
 
-        for det in sorted_dets[1:]:
-            last = deduped[-1]
-            # Check for overlap
-            if det["start"] < last["end"]:
-                # Keep the one with higher score
-                if det["score"] > last["score"]:
-                    deduped[-1] = det
-            else:
+        for det in sorted_dets:
+            overlap = False
+            for existing in deduped:
+                # Check if bounding boxes physically overlap
+                if max(det["start"], existing["start"]) < min(det["end"], existing["end"]):
+                    overlap = True
+                    break
+            if not overlap:
                 deduped.append(det)
 
-        return deduped
+        # Return sorted back by start bounds
+        return sorted(deduped, key=lambda x: x["start"])
 
     def detect_only(self, text: str) -> List[Dict[str, Any]]:
         """Run detection without masking (for preview/analysis)."""

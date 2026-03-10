@@ -45,8 +45,18 @@ except ImportError:
     HAS_WHISPER = False
 
 try:
-    from job_queue.redis_client import get_redis_client
-    HAS_REDIS = True
+    from workers.document_extractor import DocumentExtractor
+    HAS_DOC = True
+except ImportError:
+    HAS_DOC = False
+
+try:
+    if sys.platform != "win32":
+        from job_queue.redis_client import get_redis_client
+        HAS_REDIS = True
+    else:
+        # RQ requires 'fork' which is unsupported on Windows
+        HAS_REDIS = False
 except ImportError:
     HAS_REDIS = False
 
@@ -114,6 +124,12 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Audio scanning enabled")
     else:
         logger.warning("⚠️  Audio scanning disabled (whisper not installed)")
+        
+    app.state.document_available = HAS_DOC
+    if HAS_DOC:
+        logger.info("✅ Document scanning enabled")
+    else:
+        logger.warning("⚠️  Document scanning disabled (dependencies missing)")
 
     # Register Slack notifier
     try:
@@ -211,6 +227,7 @@ async def health_check(request: Request):
             "regex_detector": True,
             "image_scanner": HAS_BLUR,
             "audio_scanner": HAS_WHISPER,
+            "document_scanner": HAS_DOC,
         },
     )
 
@@ -302,6 +319,10 @@ async def scan_image(
     if file.content_type not in allowed:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
 
+    # Prevent Memory Exhaustion DoS
+    if getattr(file, "size", 0) and file.size > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image exceeds 50MB limit")
+
     image_bytes = await file.read()
     if len(image_bytes) > 50 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image exceeds 50MB limit")
@@ -343,6 +364,10 @@ async def scan_audio(
         raise HTTPException(status_code=503, detail="Audio scanning not available (whisper not installed)")
 
     scan_id = str(uuid.uuid4())
+
+    # Prevent Memory Exhaustion DoS
+    if getattr(file, "size", 0) and file.size > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio file exceeds 100MB limit")
 
     audio_bytes = await file.read()
     if len(audio_bytes) > 100 * 1024 * 1024:
@@ -391,6 +416,68 @@ async def scan_audio(
         "segments": transcription.get("segments", []),
         "duration_seconds": transcription.get("duration_seconds", 0),
         "processing_time_ms": processing_time_ms,
+    }
+
+
+@app.post("/scan/document", tags=["Scanning"])
+async def scan_document(
+    request: Request,
+    file: UploadFile = File(..., description="Document (PDF, Word, Excel, CSV, TXT) to scan"),
+):
+    """Scan document formats for PHI/PII by extracting text and parsing it."""
+    if not request.app.state.document_available:
+        raise HTTPException(status_code=503, detail="Document scanning not available")
+
+    scan_id = str(uuid.uuid4())
+    start_time = time.time()
+
+    allowed_exts = {".pdf", ".docx", ".xlsx", ".xls", ".csv", ".txt"}
+    ext = Path(file.filename).suffix.lower() if file.filename else ""
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"Unsupported document type: {ext}")
+
+    # Prevent Memory Exhaustion DoS
+    if getattr(file, "size", 0) and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Document exceeds 10MB limit")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Document exceeds 10MB limit")
+
+    try:
+        extracted_text = DocumentExtractor.extract_text(file_bytes, file.filename)
+    except Exception as e:
+        logger.error(f"Text extraction failed error={e}")
+        raise HTTPException(status_code=500, detail=f"Text extraction failed: {str(e)}")
+        
+    if not extracted_text:
+        raise HTTPException(status_code=422, detail="Failed to extract readable text from document")
+
+    # Run the extracted text through the PII Masker
+    pii_masker: PIIMasker = request.app.state.pii_masker
+    result = pii_masker.process_text(text=extracted_text)
+    
+    processing_time_ms = round((time.time() - start_time) * 1000, 2)
+
+    metrics = request.app.state.metrics
+    metrics.record_scan({
+        "scan_type": "document",
+        "risk": result.get("risk", {}),
+        "entity_count": result.get("entity_count", 0),
+        "policy": result.get("policy", {}),
+        "processing_time_ms": processing_time_ms,
+    })
+
+    return {
+        "scan_id": scan_id,
+        "filename": file.filename,
+        "entity_count": result.get("entity_count", 0),
+        "risk_score": result.get("risk", {}).get("score", 0),
+        "risk_level": result.get("risk", {}).get("level", "low"),
+        "detections": result.get("detections", []),
+        "processing_time_ms": processing_time_ms,
+        # We optionally return the masked text if it isn't too large
+        "masked_text": result.get("masked_text", "")[:5000] + ("..." if len(result.get("masked_text", "")) > 5000 else "")
     }
 
 
