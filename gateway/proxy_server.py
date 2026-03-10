@@ -423,6 +423,7 @@ async def scan_audio(
 async def scan_document(
     request: Request,
     file: UploadFile = File(..., description="Document (PDF, Word, Excel, CSV, TXT) to scan"),
+    api_key: str = Depends(get_api_key)
 ):
     """Scan document formats for PHI/PII by extracting text and parsing it."""
     if not request.app.state.document_available:
